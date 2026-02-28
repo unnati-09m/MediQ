@@ -11,7 +11,7 @@
 ### Problem Description
 Small and mid-sized clinics form the backbone of primary healthcare, especially in densely populated regions where patient inflow is unpredictable and often exceeds planned capacity. Most clinics still rely on manual appointment books, basic spreadsheets, or first-come-first-serve systems. Doctors must juggle pre-booked appointments, walk-in patients, emergency cases, and last-minute cancellations — all while maintaining consultation quality. Consultation durations vary significantly based on case complexity, urgency, and patient history, making static scheduling systems inefficient and unrealistic in real-world clinical environments.
 
-### Target Users
+### Target Users 
 - **Clinic Administrators & Reception Staff** — managing daily queue operations
 - **Doctors & Practitioners** — handling consultations and time management
 - **Patients** — seeking timely, transparent care with reduced waiting
