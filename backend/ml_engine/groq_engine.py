@@ -25,16 +25,20 @@ async def analyze_urgency(reason: str) -> int:
         logger.warning("Groq client not initialized, defaulting urgency to 5.")
         return 5
 
-    prompt = f"""You are a medical triage assistant.
-Evaluate the following patient's reason for visit and determine its medical urgency on a scale of 1 to 10.
-1 means mild/routine (e.g., general checkup, mild cold).
-5 means moderate (e.g., flu symptoms, minor cuts).
-10 means severe/emergency (e.g., severe chest pain, heavy bleeding, difficulty breathing).
+    prompt = f"""You are an expert medical triage assistant.
+Evaluate the patient's reason for visit and determine true medical urgency on a scale of 1 to 10.
+
+STRICT SCORING GUIDELINES:
+1-2: Non-urgent / Routine (e.g., regular checkup, mild cold, runny nose, slight headache, prescription refill).
+3-4: Minor urgency (e.g., mild fever, sore throat, mild sprain, minor rash).
+5-6: Moderate (e.g., high fever that won't go down, deep cuts needing stitches, suspected isolated fractures).
+7-8: Urgent (e.g., severe abdominal pain, sudden extreme weakness, minor car accidents).
+9-10: Absolute Emergency / Life-Threatening (e.g., HEART ATTACK, severe chest pain, stroke symptoms, uncontrolled heavy bleeding, severe breathing difficulty, unconsciousness).
 
 Patient Reason: "{reason}"
 
-Respond ONLY with a raw JSON object with a single key "urgency" containing the integer score.
-Example: {{"urgency": 8}}
+You MUST respond ONLY with a raw JSON object with a single key "urgency" containing the integer score.
+Example: {{"urgency": 2}}
 """
 
     try:
