@@ -1,39 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import api from '../api'
+import socket from '../socket'
 
-const INITIAL_KANBAN = {
-    waiting: [
-        { token: '045', name: 'Arjun Nair', wait: 820, priority: 'urgent', reason: 'Fever / Cold' },
-        { token: '046', name: 'Meera Joshi', wait: 540, priority: 'normal', reason: 'Specialist Consult' },
-        { token: '047', name: 'Kiran Kumar', wait: 240, priority: 'normal', reason: 'General Checkup' },
-        { token: '048', name: 'Rohit Desai', wait: 120, priority: 'critical', reason: 'Emergency' },
-    ],
-    inConsult: [
-        { token: '043', name: 'Rahul Verma', wait: 1420, priority: 'normal', reason: 'General Checkup' },
-        { token: '044', name: 'Sunita Patel', wait: 960, priority: 'normal', reason: 'Follow-up' },
-    ],
-    completed: [
-        { token: '041', name: 'Preet Kaur', wait: 0, priority: 'normal', reason: 'General Checkup' },
-        { token: '042', name: 'Vishal Shah', wait: 0, priority: 'urgent', reason: 'Fever / Cold' },
-    ],
-    noShow: [
-        { token: '039', name: 'Anjali Rao', wait: 0, priority: 'normal', reason: 'Follow-up' },
-    ],
+function PriorityBadge({ urgency }) {
+    if (urgency >= 9) return <span className="badge badge-red">🚨 critical</span>
+    if (urgency >= 6) return <span className="badge badge-amber">⚡ urgent</span>
+    return <span className="badge badge-teal">• normal</span>
 }
-
-const DOCTORS_TOGGLE = [
-    { name: 'Dr. Priya Sharma', specialty: 'General', avatar: 'PS', on: true },
-    { name: 'Dr. Anil Mehta', specialty: 'Cardiology', avatar: 'AM', on: true },
-    { name: 'Dr. Sneha Rao', specialty: 'Pediatrics', avatar: 'SR', on: false },
-]
-
-const INITIAL_LOG = [
-    { time: '18:32', msg: 'Token #043 consultation started by Dr. Priya Sharma', type: 'info' },
-    { time: '18:28', msg: 'Emergency Token #048 added — queue reshuffled', type: 'warn' },
-    { time: '18:15', msg: 'Token #039 marked as NO-SHOW', type: 'error' },
-    { time: '18:08', msg: 'Token #041 marked complete by Dr. Priya Sharma', type: 'success' },
-    { time: '17:55', msg: 'Token #042 marked complete by Dr. Anil Mehta', type: 'success' },
-    { time: '17:44', msg: 'Dr. Sneha Rao marked ON BREAK', type: 'warn' },
-]
 
 function formatWait(secs) {
     const m = Math.floor(secs / 60)
@@ -42,79 +15,191 @@ function formatWait(secs) {
     return `${m}m ${String(s).padStart(2, '0')}s`
 }
 
-function PriorityBadge({ priority }) {
-    const map = { critical: ['badge-red', '🚨'], urgent: ['badge-amber', '⚡'], normal: ['badge-teal', '•'] }
-    const [cls, icon] = map[priority] || map.normal
-    return <span className={`badge ${cls}`}>{icon} {priority}</span>
-}
-
-function WaitTimer({ initial }) {
-    const [secs, setSecs] = useState(initial)
+function WaitTimer({ createdAt }) {
+    const [secs, setSecs] = useState(0)
     useEffect(() => {
-        const t = setInterval(() => setSecs(s => s + 1), 1000)
+        if (!createdAt) return
+        const update = () => {
+            const elapsed = Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000)
+            setSecs(elapsed)
+        }
+        update()
+        const t = setInterval(update, 1000)
         return () => clearInterval(t)
-    }, [])
+    }, [createdAt])
     const color = secs > 900 ? 'var(--accent-red)' : secs > 600 ? 'var(--accent-amber)' : 'var(--text-muted)'
     return <span style={{ fontFamily: 'Orbitron, monospace', fontSize: 11, color }}>{formatWait(secs)}</span>
 }
 
+const LOG_COLORS = { info: '#6B8CAE', warn: '#FFB020', error: '#FF4757', success: '#00E676' }
+
 export default function StaffDashboard() {
-    const [kanban, setKanban] = useState(INITIAL_KANBAN)
-    const [doctors, setDoctors] = useState(DOCTORS_TOGGLE)
-    const [log, setLog] = useState(INITIAL_LOG)
-    const [dragging, setDragging] = useState(null) // {col, idx}
-    const [dragOver, setDragOver] = useState(null)
+    const [queue, setQueue] = useState([])
+    const [doctors, setDoctors] = useState([])
+    const [log, setLog] = useState([])
     const [showRegisterModal, setShowRegisterModal] = useState(false)
-    const [newPatient, setNewPatient] = useState({ name: '', reason: 'General Checkup', priority: 'normal' })
+    const [newPatient, setNewPatient] = useState({ name: '', reason: 'General Checkup', urgency: 5 })
+    const [stats, setStats] = useState({ in_queue: 0, in_consultation: 0, completed_today: 0, no_shows_today: 0 })
+    const [loading, setLoading] = useState({})
     const logRef = useRef(null)
 
     function addLog(msg, type = 'info') {
         const now = new Date()
         const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
-        setLog(l => [{ time, msg, type }, ...l.slice(0, 19)])
+        setLog(l => [{ time, msg, type }, ...l.slice(0, 24)])
     }
 
-    function toggleDoctor(idx) {
-        setDoctors(ds => ds.map((d, i) => i === idx ? { ...d, on: !d.on } : d))
-        const d = doctors[idx]
-        addLog(`${d.name} marked ${d.on ? 'OFF DUTY / ON BREAK' : 'ON DUTY'}`, d.on ? 'warn' : 'success')
+    async function fetchAll() {
+        try {
+            const [qRes, dRes, sRes, logRes] = await Promise.all([
+                api.get('/patients/queue'),
+                api.get('/doctors'),
+                api.get('/patients/stats'),
+                api.get('/staff/logs').catch(() => ({ data: [] })),
+            ])
+            setQueue(qRes.data)
+            setDoctors(dRes.data)
+            setStats(sRes.data)
+            if (logRes.data?.length > 0) {
+                setLog(logRes.data.map(e => ({
+                    time: new Date(e.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
+                    msg: `${e.event_type.replace(/_/g, ' ')} — ref #${e.reference_id || '—'}`,
+                    type: e.event_type.includes('emergency') ? 'error' :
+                        e.event_type.includes('complete') ? 'success' :
+                            e.event_type.includes('noshow') ? 'warn' : 'info',
+                })))
+            }
+        } catch { }
     }
 
-    function moveCard(fromCol, fromIdx, toCol) {
-        if (fromCol === toCol) return
-        const card = kanban[fromCol][fromIdx]
-        setKanban(k => ({
-            ...k,
-            [fromCol]: k[fromCol].filter((_, i) => i !== fromIdx),
-            [toCol]: [card, ...k[toCol]],
-        }))
-        addLog(`Token #${card.token} moved from ${fromCol} → ${toCol}`, 'info')
+    useEffect(() => {
+        fetchAll()
+
+        const onQueueUpdated = (data) => {
+            if (data.queue) setQueue(data.queue)
+            if (data.stats) setStats(data.stats)
+        }
+        const onDoctorStatus = (data) => {
+            setDoctors(prev => prev.map(d =>
+                d.id === data.doctor_id ? { ...d, ...data } : d
+            ))
+            addLog(`${data.doctor_name} marked ${data.is_active ? (data.is_on_break ? 'ON BREAK' : 'ON DUTY') : 'INACTIVE'}`, data.is_active ? 'info' : 'warn')
+        }
+        const onPatientStatus = (data) => {
+            const typeMap = { completed: 'success', no_show: 'warn', in_consultation: 'info' }
+            addLog(`Token #${String(data.token_number).padStart(3, '0')} → ${data.status}${data.doctor_name ? ` (${data.doctor_name})` : ''}`, typeMap[data.status] || 'info')
+        }
+        const onEmergency = (data) => {
+            addLog(`🚨 EMERGENCY Token #${String(data.token_number).padStart(3, '0')} — ${data.name} — queue reshuffled`, 'error')
+        }
+
+        socket.on('queue_updated', onQueueUpdated)
+        socket.on('doctor_status_changed', onDoctorStatus)
+        socket.on('patient_status_changed', onPatientStatus)
+        socket.on('emergency_added', onEmergency)
+
+        const pollInterval = setInterval(fetchAll, 20000)
+
+        return () => {
+            socket.off('queue_updated', onQueueUpdated)
+            socket.off('doctor_status_changed', onDoctorStatus)
+            socket.off('patient_status_changed', onPatientStatus)
+            socket.off('emergency_added', onEmergency)
+            clearInterval(pollInterval)
+        }
+    }, [])
+
+    async function toggleDoctor(doctor) {
+        setLoading(l => ({ ...l, [`doc_${doctor.id}`]: true }))
+        try {
+            const wasActive = doctor.is_active && !doctor.is_on_break
+            await api.put(`/staff/toggle-doctor/${doctor.id}`, {
+                is_active: true,
+                is_on_break: wasActive,  // toggle break
+            })
+            await fetchAll()
+            addLog(`${doctor.name} → ${wasActive ? 'ON BREAK' : 'AVAILABLE'}`, wasActive ? 'warn' : 'success')
+        } catch (err) {
+            addLog(`Error toggling ${doctor.name}: ${err.message}`, 'error')
+        } finally {
+            setLoading(l => ({ ...l, [`doc_${doctor.id}`]: false }))
+        }
     }
 
-    function addWalkIn() {
-        if (!newPatient.name) return
-        const token = String(Math.floor(Math.random() * 10) + 49)
-        const card = { token, name: newPatient.name, wait: 0, priority: newPatient.priority, reason: newPatient.reason }
-        setKanban(k => ({ ...k, waiting: [card, ...k.waiting] }))
-        addLog(`Walk-in Token #${token} registered — ${newPatient.name}`, 'success')
-        setNewPatient({ name: '', reason: 'General Checkup', priority: 'normal' })
-        setShowRegisterModal(false)
+    async function addWalkIn() {
+        if (!newPatient.name.trim()) return
+        setLoading(l => ({ ...l, walkin: true }))
+        try {
+            const res = await api.post('/staff/register-walkin', {
+                name: newPatient.name,
+                phone: '0000000000',
+                reason: newPatient.reason,
+                urgency: newPatient.urgency,
+            })
+            addLog(`Walk-in Token #${String(res.data.token_number).padStart(3, '0')} — ${newPatient.name}`, 'success')
+            setNewPatient({ name: '', reason: 'General Checkup', urgency: 5 })
+            setShowRegisterModal(false)
+            await fetchAll()
+        } catch (err) {
+            addLog(`Walk-in error: ${err.message}`, 'error')
+        } finally {
+            setLoading(l => ({ ...l, walkin: false }))
+        }
     }
 
-    function addEmergency() {
-        const token = String(Math.floor(Math.random() * 10) + 52)
-        const card = { token, name: 'Emergency Patient', wait: 0, priority: 'critical', reason: 'Emergency' }
-        setKanban(k => ({ ...k, waiting: [card, ...k.waiting] }))
-        addLog(`🚨 EMERGENCY Token #${token} added — queue reshuffled`, 'error')
+    async function addEmergency() {
+        setLoading(l => ({ ...l, emergency: true }))
+        try {
+            const res = await api.post('/staff/add-emergency', {
+                name: 'Emergency Patient',
+                phone: '0000000000',
+                reason: 'Emergency',
+            })
+            addLog(`🚨 EMERGENCY Token #${String(res.data.token_number).padStart(3, '0')} added — queue reshuffled`, 'error')
+            await fetchAll()
+        } catch (err) {
+            addLog(`Emergency error: ${err.message}`, 'error')
+        } finally {
+            setLoading(l => ({ ...l, emergency: false }))
+        }
     }
 
-    const logColor = { info: '#6B8CAE', warn: '#FFB020', error: '#FF4757', success: '#00E676' }
+    async function markNoShow(patient) {
+        setLoading(l => ({ ...l, [`noshow_${patient.id}`]: true }))
+        try {
+            await api.post(`/staff/mark-noshow/${patient.id}`)
+            addLog(`Token #${String(patient.token_number).padStart(3, '0')} marked as NO-SHOW`, 'warn')
+            await fetchAll()
+        } catch (err) {
+            addLog(`No-show error: ${err.message}`, 'error')
+        } finally {
+            setLoading(l => ({ ...l, [`noshow_${patient.id}`]: false }))
+        }
+    }
+
+    async function rebalance() {
+        setLoading(l => ({ ...l, rebalance: true }))
+        try {
+            const res = await api.post('/staff/rebalance')
+            addLog(`Queue rebalanced — ${res.data.queue_length} patients re-scored`, 'success')
+            await fetchAll()
+        } catch { } finally {
+            setLoading(l => ({ ...l, rebalance: false }))
+        }
+    }
+
+    const kanban = {
+        waiting: queue.filter(p => p.status === 'waiting'),
+        inConsult: queue.filter(p => p.status === 'in_consultation'),
+        completed: queue.filter(p => p.status === 'completed').slice(0, 5),
+        noShow: queue.filter(p => p.status === 'no_show').slice(0, 5),
+    }
 
     const COLS = [
-        { key: 'waiting', label: 'WAITING', color: '#3D7FFF', count: kanban.waiting.length },
-        { key: 'inConsult', label: 'IN CONSULTATION', color: '#00D4BD', count: kanban.inConsult.length },
-        { key: 'completed', label: 'COMPLETED', color: '#00E676', count: kanban.completed.length },
-        { key: 'noShow', label: 'NO-SHOW', color: '#6B8CAE', count: kanban.noShow.length },
+        { key: 'waiting', label: 'WAITING', color: '#3D7FFF', data: kanban.waiting },
+        { key: 'inConsult', label: 'IN CONSULTATION', color: '#00D4BD', data: kanban.inConsult },
+        { key: 'completed', label: 'COMPLETED', color: '#00E676', data: kanban.completed },
+        { key: 'noShow', label: 'NO-SHOW', color: '#6B8CAE', data: kanban.noShow },
     ]
 
     return (
@@ -124,12 +209,17 @@ export default function StaffDashboard() {
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div>
                         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 20, color: 'var(--text-primary)' }}>Staff Control Centre</h1>
-                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)' }}>MediFlow Clinic · Mumbai</div>
+                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)' }}>MediQ Clinic · Real-time Management</div>
                     </div>
                     <div style={{ display: 'flex', gap: 10 }}>
                         <button onClick={() => setShowRegisterModal(true)} className="btn-teal" style={{ padding: '10px 20px', borderRadius: 8, fontSize: 13 }}>+ Register Walk-in</button>
-                        <button className="btn-outline" style={{ padding: '10px 18px', borderRadius: 8, fontSize: 13 }}>📋 Full Queue</button>
-                        <button className="btn-red emergency-glow" onClick={addEmergency} style={{ padding: '10px 18px', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>🚨 Add Emergency</button>
+                        <button onClick={rebalance} className="btn-outline" disabled={loading.rebalance} style={{ padding: '10px 18px', borderRadius: 8, fontSize: 13 }}>
+                            {loading.rebalance ? '⏳' : '⚙'} Rebalance
+                        </button>
+                        <button className="btn-red emergency-glow" onClick={addEmergency} disabled={loading.emergency}
+                            style={{ padding: '10px 18px', borderRadius: 8, fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            🚨 {loading.emergency ? 'Adding...' : 'Add Emergency'}
+                        </button>
                     </div>
                 </div>
             </div>
@@ -141,52 +231,37 @@ export default function StaffDashboard() {
                     <div style={{ padding: '12px 16px 0', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Live Queue Manager</div>
                     <div style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', padding: '12px 16px 16px', display: 'flex', gap: 12 }}>
                         {COLS.map(col => (
-                            <div
-                                key={col.key}
-                                className="kanban-col"
-                                style={{ minWidth: 200, flex: 1, display: 'flex', flexDirection: 'column', borderColor: dragOver === col.key ? col.color + '44' : 'rgba(0,212,189,0.08)' }}
-                                onDragOver={e => { e.preventDefault(); setDragOver(col.key) }}
-                                onDrop={() => {
-                                    if (dragging) moveCard(dragging.col, dragging.idx, col.key)
-                                    setDragging(null); setDragOver(null)
-                                }}
-                                onDragLeave={() => setDragOver(null)}
-                            >
+                            <div key={col.key} className="kanban-col" style={{ minWidth: 200, flex: 1, display: 'flex', flexDirection: 'column' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                                     <span style={{ fontFamily: 'IBM Plex Mono', fontWeight: 600, fontSize: 11, color: col.color, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{col.label}</span>
-                                    <span style={{ background: col.color + '22', color: col.color, border: `1px solid ${col.color}44`, borderRadius: 9999, padding: '2px 10px', fontFamily: 'Orbitron', fontSize: 11, fontWeight: 700 }}>{col.count}</span>
+                                    <span style={{ background: col.color + '22', color: col.color, border: `1px solid ${col.color}44`, borderRadius: 9999, padding: '2px 10px', fontFamily: 'Orbitron', fontSize: 11, fontWeight: 700 }}>{col.data.length}</span>
                                 </div>
                                 <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                                    {kanban[col.key].map((card, idx) => (
-                                        <div
-                                            key={card.token}
-                                            draggable
-                                            onDragStart={() => setDragging({ col: col.key, idx })}
-                                            style={{
-                                                background: col.key === 'noShow' ? 'rgba(107,140,174,0.05)' : card.priority === 'critical' ? 'rgba(255,71,87,0.06)' : 'rgba(10,22,40,0.8)',
-                                                border: `1px solid ${card.priority === 'critical' ? 'rgba(255,71,87,0.3)' : col.key === 'noShow' ? 'rgba(107,140,174,0.15)' : 'rgba(0,212,189,0.12)'}`,
-                                                borderRadius: 8, padding: '10px 12px',
-                                                opacity: col.key === 'noShow' ? 0.5 : 1,
-                                                cursor: 'grab',
-                                                animation: card.priority === 'critical' ? 'emergencyPulse 1.5s infinite' : 'none',
-                                                position: 'relative', overflow: 'hidden',
-                                            }}
-                                        >
-                                            {col.key === 'noShow' && (
-                                                <div style={{ position: 'absolute', top: 6, right: 8, fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', border: '1px solid rgba(107,140,174,0.3)', padding: '2px 6px', borderRadius: 4, transform: 'rotate(-3deg)' }}>SKIPPED</div>
-                                            )}
+                                    {col.data.map(card => (
+                                        <div key={card.id} style={{
+                                            background: col.key === 'noShow' ? 'rgba(107,140,174,0.05)' : card.urgency >= 9 ? 'rgba(255,71,87,0.06)' : 'rgba(10,22,40,0.8)',
+                                            border: `1px solid ${card.urgency >= 9 ? 'rgba(255,71,87,0.3)' : col.key === 'noShow' ? 'rgba(107,140,174,0.15)' : 'rgba(0,212,189,0.12)'}`,
+                                            borderRadius: 8, padding: '10px 12px',
+                                            opacity: col.key === 'noShow' ? 0.5 : 1,
+                                            animation: card.urgency >= 9 && col.key === 'waiting' ? 'emergencyPulse 1.5s infinite' : 'none',
+                                        }}>
                                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                                                <span style={{ fontFamily: 'Orbitron, monospace', fontSize: 14, fontWeight: 700, color: col.key === 'noShow' ? 'var(--text-dim)' : 'var(--text-primary)' }}>#{card.token}</span>
-                                                <PriorityBadge priority={card.priority} />
+                                                <span style={{ fontFamily: 'Orbitron, monospace', fontSize: 14, fontWeight: 700, color: col.key === 'noShow' ? 'var(--text-dim)' : 'var(--text-primary)' }}>#{String(card.token_number).padStart(3, '0')}</span>
+                                                <PriorityBadge urgency={card.urgency} />
                                             </div>
                                             <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600, fontSize: 13, color: col.key === 'noShow' ? 'var(--text-muted)' : 'var(--text-primary)', marginBottom: 3 }}>{card.name}</div>
                                             <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-dim)', marginBottom: col.key === 'waiting' ? 6 : 0 }}>{card.reason}</div>
-                                            {col.key === 'waiting' && <WaitTimer initial={card.wait} />}
-                                            {col.key === 'inConsult' && <WaitTimer initial={card.wait} />}
+                                            {col.key === 'waiting' && <WaitTimer createdAt={card.created_at} />}
+                                            {col.key === 'waiting' && (
+                                                <button onClick={() => markNoShow(card)} disabled={loading[`noshow_${card.id}`]}
+                                                    style={{ marginTop: 6, width: '100%', padding: '4px', borderRadius: 4, background: 'rgba(107,140,174,0.1)', border: '1px solid rgba(107,140,174,0.2)', color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', fontSize: 10, cursor: 'pointer' }}>
+                                                    {loading[`noshow_${card.id}`] ? '...' : 'Mark No-Show'}
+                                                </button>
+                                            )}
                                         </div>
                                     ))}
-                                    {kanban[col.key].length === 0 && (
-                                        <div style={{ textAlign: 'center', padding: 20, fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-dim)', borderRadius: 6, border: '1px dashed rgba(107,140,174,0.15)' }}>Drop here</div>
+                                    {col.data.length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: 20, fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-dim)', borderRadius: 6, border: '1px dashed rgba(107,140,174,0.15)' }}>Empty</div>
                                     )}
                                 </div>
                             </div>
@@ -200,19 +275,23 @@ export default function StaffDashboard() {
                     <div style={{ padding: 16, borderBottom: '1px solid rgba(0,212,189,0.08)' }}>
                         <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 12, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Doctor Availability</div>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                            {doctors.map((d, i) => (
-                                <div key={d.name} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(10,22,40,0.6)', border: `1px solid ${d.on ? 'rgba(0,212,189,0.2)' : 'rgba(107,140,174,0.12)'}`, borderRadius: 8, padding: '10px 14px' }}>
-                                    <div style={{ width: 34, height: 34, borderRadius: '50%', background: d.on ? 'rgba(0,212,189,0.15)' : 'rgba(107,140,174,0.1)', border: `2px solid ${d.on ? 'rgba(0,212,189,0.4)' : 'rgba(107,140,174,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: d.on ? 'var(--accent-teal)' : 'var(--text-muted)', flexShrink: 0 }}>{d.avatar}</div>
-                                    <div style={{ flex: 1, lineHeight: 1 }}>
-                                        <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600, fontSize: 13, color: d.on ? 'var(--text-primary)' : 'var(--text-muted)' }}>{d.name}</div>
-                                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{d.specialty}</div>
+                            {doctors.map(d => {
+                                const on = d.is_active && !d.is_on_break
+                                const initials = d.name.split(' ').map(w => w[0]).slice(0, 2).join('')
+                                return (
+                                    <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(10,22,40,0.6)', border: `1px solid ${on ? 'rgba(0,212,189,0.2)' : 'rgba(107,140,174,0.12)'}`, borderRadius: 8, padding: '10px 14px' }}>
+                                        <div style={{ width: 34, height: 34, borderRadius: '50%', background: on ? 'rgba(0,212,189,0.15)' : 'rgba(107,140,174,0.1)', border: `2px solid ${on ? 'rgba(0,212,189,0.4)' : 'rgba(107,140,174,0.2)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Syne', fontWeight: 700, fontSize: 12, color: on ? 'var(--accent-teal)' : 'var(--text-muted)', flexShrink: 0 }}>{initials}</div>
+                                        <div style={{ flex: 1, lineHeight: 1 }}>
+                                            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600, fontSize: 13, color: on ? 'var(--text-primary)' : 'var(--text-muted)' }}>{d.name}</div>
+                                            <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>{d.specialization}</div>
+                                        </div>
+                                        <label className="toggle-switch">
+                                            <input type="checkbox" checked={on} onChange={() => toggleDoctor(d)} disabled={loading[`doc_${d.id}`]} />
+                                            <span className="toggle-slider" />
+                                        </label>
                                     </div>
-                                    <label className="toggle-switch">
-                                        <input type="checkbox" checked={d.on} onChange={() => toggleDoctor(i)} />
-                                        <span className="toggle-slider" />
-                                    </label>
-                                </div>
-                            ))}
+                                )
+                            })}
                         </div>
                     </div>
 
@@ -220,13 +299,13 @@ export default function StaffDashboard() {
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid rgba(0,212,189,0.08)' }}>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                             {[
-                                ['In Queue', kanban.waiting.length, 'teal'],
-                                ['Consulting', kanban.inConsult.length, 'blue'],
-                                ['Completed', kanban.completed.length, 'green'],
-                                ['No-Shows', kanban.noShow.length, 'grey'],
+                                ['In Queue', stats.in_queue || 0, 'teal'],
+                                ['Consulting', stats.in_consultation || 0, 'blue'],
+                                ['Completed', stats.completed_today || 0, 'teal'],
+                                ['No-Shows', stats.no_shows_today || 0, 'teal'],
                             ].map(([l, v, c]) => (
                                 <div key={l} style={{ background: 'rgba(10,22,40,0.6)', border: '1px solid rgba(0,212,189,0.08)', borderRadius: 8, padding: '10px', textAlign: 'center' }}>
-                                    <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 18, fontWeight: 700, color: `var(--accent-${c === 'grey' ? 'teal' : c})`, opacity: c === 'grey' ? 0.6 : 1 }}>{v}</div>
+                                    <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 18, fontWeight: 700, color: `var(--accent-${c})` }}>{v}</div>
                                     <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{l}</div>
                                 </div>
                             ))}
@@ -240,11 +319,14 @@ export default function StaffDashboard() {
                             Activity Log
                         </div>
                         <div className="terminal-log" ref={logRef} style={{ flex: 1, padding: '12px 14px', overflowY: 'auto' }}>
+                            {log.length === 0 && (
+                                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-dim)' }}>Waiting for events…</div>
+                            )}
                             {log.map((entry, i) => (
                                 <div key={i} style={{ marginBottom: 4, display: 'flex', gap: 8 }}>
                                     <span style={{ color: 'rgba(0,230,118,0.4)', flexShrink: 0 }}>{entry.time}</span>
-                                    <span style={{ color: logColor[entry.type] || '#6B8CAE' }}>—</span>
-                                    <span style={{ color: logColor[entry.type] || '#6B8CAE', flex: 1 }}>{entry.msg}</span>
+                                    <span style={{ color: LOG_COLORS[entry.type] || '#6B8CAE' }}>—</span>
+                                    <span style={{ color: LOG_COLORS[entry.type] || '#6B8CAE', flex: 1 }}>{entry.msg}</span>
                                 </div>
                             ))}
                         </div>
@@ -263,18 +345,12 @@ export default function StaffDashboard() {
                                 {['General Checkup', 'Fever / Cold', 'Follow-up / Prescription', 'Specialist Consult', 'Emergency'].map(r => <option key={r}>{r}</option>)}
                             </select>
                             <div>
-                                <label style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Priority</label>
-                                <div style={{ display: 'flex', gap: 8 }}>
-                                    {['normal', 'urgent', 'critical'].map(p => (
-                                        <button key={p} onClick={() => setNewPatient(n => ({ ...n, priority: p }))}
-                                            className={p === 'critical' ? 'btn-red' : p === 'urgent' ? 'btn-outline' : 'btn-outline'}
-                                            style={{ flex: 1, padding: '8px', borderRadius: 7, fontSize: 12, fontWeight: newPatient.priority === p ? 700 : 400, border: newPatient.priority === p ? `1px solid ${p === 'critical' ? 'var(--accent-red)' : 'var(--accent-teal)'}` : undefined }}>
-                                            {p.charAt(0).toUpperCase() + p.slice(1)}
-                                        </button>
-                                    ))}
-                                </div>
+                                <label style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.1em' }}>Urgency (1–10): {newPatient.urgency}</label>
+                                <input type="range" min="1" max="10" value={newPatient.urgency} onChange={e => setNewPatient(n => ({ ...n, urgency: parseInt(e.target.value) }))} style={{ width: '100%' }} />
                             </div>
-                            <button onClick={addWalkIn} className="btn-teal" style={{ padding: '13px', borderRadius: 8, fontSize: 14 }}>Confirm & Issue Token</button>
+                            <button onClick={addWalkIn} className="btn-teal" disabled={loading.walkin} style={{ padding: '13px', borderRadius: 8, fontSize: 14 }}>
+                                {loading.walkin ? '⏳ Processing...' : 'Confirm & Issue Token'}
+                            </button>
                         </div>
                     </div>
                 </div>

@@ -1,22 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
-
-const INITIAL_QUEUE = [
-    { token: '043', name: 'Rahul Verma', reason: 'General Checkup', urgency: 3, estTime: 15, age: 34, gender: 'M', active: true },
-    { token: '044', name: 'Sunita Patel', reason: 'Follow-up / Prescription', urgency: 5, estTime: 10, age: 52, gender: 'F', active: false },
-    { token: '045', name: 'Arjun Nair', reason: 'Fever / Cold', urgency: 7, estTime: 12, age: 28, gender: 'M', active: false },
-    { token: '046', name: 'Meera Joshi', reason: 'Specialist Consult', urgency: 4, estTime: 20, age: 45, gender: 'F', active: false },
-    { token: '047', name: 'Kiran Kumar', reason: 'General Checkup', urgency: 2, estTime: 15, age: 61, gender: 'M', active: false },
-]
+import api from '../api'
+import socket from '../socket'
 
 const HOURLY_DATA = [2, 3, 5, 4, 6, 7, 5, 4, 3]
 const HOURS = ['9AM', '10AM', '11AM', '12PM', '1PM', '2PM', '3PM', '4PM', '5PM']
-
-const PATIENT_TYPES = [
-    { label: 'General', value: 38, color: '#00D4BD' },
-    { label: 'Follow-up', value: 28, color: '#3D7FFF' },
-    { label: 'Specialist', value: 20, color: '#FFB020' },
-    { label: 'Emergency', value: 14, color: '#FF4757' },
-]
 
 function UrgencyBadge({ urgency }) {
     if (urgency >= 8) return <span className="badge badge-red">Critical</span>
@@ -45,14 +32,19 @@ function UrgencyGauge({ value }) {
     )
 }
 
-function ConsultTimer({ running }) {
-    const [secs, setSecs] = useState(743)
+function ConsultTimer({ startTime }) {
+    const [secs, setSecs] = useState(0)
     const ref = useRef(null)
     useEffect(() => {
-        if (!running) return
-        ref.current = setInterval(() => setSecs(s => s + 1), 1000)
+        if (!startTime) return
+        const updateTimer = () => {
+            const elapsed = Math.floor((Date.now() - new Date(startTime).getTime()) / 1000)
+            setSecs(elapsed)
+        }
+        updateTimer()
+        ref.current = setInterval(updateTimer, 1000)
         return () => clearInterval(ref.current)
-    }, [running])
+    }, [startTime])
     const h = Math.floor(secs / 3600)
     const m = Math.floor((secs % 3600) / 60)
     const s = secs % 60
@@ -65,72 +57,111 @@ function ConsultTimer({ running }) {
     )
 }
 
-function DonutChart() {
-    let offset = 0
-    const r = 48, cx = 60, cy = 60
-    const circ = 2 * Math.PI * r
-    const total = PATIENT_TYPES.reduce((a, b) => a + b.value, 0)
-    return (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <svg width="120" height="120" viewBox="0 0 120 120">
-                {PATIENT_TYPES.map(pt => {
-                    const dash = (pt.value / total) * circ
-                    const el = (
-                        <circle key={pt.label} cx={cx} cy={cy} r={r}
-                            fill="none" stroke={pt.color} strokeWidth="14" strokeLinecap="butt"
-                            strokeDasharray={`${dash} ${circ - dash}`}
-                            strokeDashoffset={-(offset)} transform="rotate(-90, 60, 60)"
-                        />
-                    )
-                    offset += dash
-                    return el
-                })}
-                <text x="60" y="55" textAnchor="middle" fill="var(--text-primary)" fontFamily="Orbitron, monospace" fontSize="14" fontWeight="700">{total}</text>
-                <text x="60" y="70" textAnchor="middle" fill="var(--text-muted)" fontFamily="IBM Plex Mono" fontSize="9">PATIENTS</text>
-            </svg>
-            <div style={{ flex: 1 }}>
-                {PATIENT_TYPES.map(pt => (
-                    <div key={pt.label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                        <div style={{ width: 8, height: 8, borderRadius: 2, background: pt.color, flexShrink: 0 }} />
-                        <span style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', flex: 1 }}>{pt.label}</span>
-                        <span style={{ fontFamily: 'Orbitron, monospace', fontSize: 11, color: pt.color }}>{pt.value}%</span>
-                    </div>
-                ))}
-            </div>
-        </div>
-    )
-}
-
 export default function DoctorDashboard() {
-    const [queue, setQueue] = useState(INITIAL_QUEUE)
-    const [activeIdx, setActiveIdx] = useState(0)
+    const [queue, setQueue] = useState([])
+    const [doctors, setDoctors] = useState([])
+    const [activePatientId, setActivePatientId] = useState(null)
     const [notes, setNotes] = useState('')
+    const [loading, setLoading] = useState({})
+    const [error, setError] = useState(null)
+    const [stats, setStats] = useState({ completed_today: 0 })
 
-    const activePatient = queue[activeIdx]
+    // Default to doctor 1 (Dr. Priya Sharma) — in a real app this would be auth-based
+    const DOCTOR_ID = 1
 
-    function markComplete() {
-        setQueue(q => {
-            const updated = q.filter((_, i) => i !== activeIdx)
-            if (updated.length > 0) return updated.map((p, i) => ({ ...p, active: i === 0 }))
-            return []
-        })
-        setActiveIdx(0)
-        setNotes('')
+    const activePatient = queue.find(p => p.id === activePatientId) ||
+        queue.find(p => p.status === 'in_consultation') ||
+        null
+
+    async function fetchQueue() {
+        try {
+            const [qRes, dRes, sRes] = await Promise.all([
+                api.get('/patients/queue'),
+                api.get('/doctors'),
+                api.get('/patients/stats'),
+            ])
+            setQueue(qRes.data)
+            setDoctors(dRes.data)
+            setStats(sRes.data)
+        } catch { }
     }
 
-    function markUrgent(idx) {
-        setQueue(q => q.map((p, i) => i === idx ? { ...p, urgency: Math.min(10, p.urgency + 2) } : p))
+    useEffect(() => {
+        fetchQueue()
+
+        const onQueueUpdated = (data) => {
+            if (data.queue) setQueue(data.queue)
+            if (data.stats) setStats(data.stats)
+        }
+        socket.on('queue_updated', onQueueUpdated)
+        socket.on('patient_status_changed', fetchQueue)
+        socket.on('doctor_status_changed', fetchQueue)
+
+        const pollInterval = setInterval(fetchQueue, 20000)
+
+        return () => {
+            socket.off('queue_updated', onQueueUpdated)
+            socket.off('patient_status_changed', fetchQueue)
+            socket.off('doctor_status_changed', fetchQueue)
+            clearInterval(pollInterval)
+        }
+    }, [])
+
+    async function handleStartConsult(patient) {
+        setLoading(l => ({ ...l, [`start_${patient.id}`]: true }))
+        setError(null)
+        try {
+            await api.post(`/doctors/${DOCTOR_ID}/start-consultation`, { patient_id: patient.id })
+            setActivePatientId(patient.id)
+            await fetchQueue()
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(l => ({ ...l, [`start_${patient.id}`]: false }))
+        }
     }
 
-    function skipPatient(idx) {
-        setQueue(q => [...q.filter((_, i) => i !== idx), { ...q[idx], active: false }])
+    async function handleComplete() {
+        setLoading(l => ({ ...l, complete: true }))
+        setError(null)
+        try {
+            await api.post(`/doctors/${DOCTOR_ID}/complete-consultation`)
+            setActivePatientId(null)
+            setNotes('')
+            await fetchQueue()
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(l => ({ ...l, complete: false }))
+        }
     }
 
-    function startConsult(idx) {
-        setActiveIdx(idx)
-        setQueue(q => q.map((p, i) => ({ ...p, active: i === idx })))
+    async function handleSkip(patient) {
+        setLoading(l => ({ ...l, [`skip_${patient.id}`]: true }))
+        try {
+            await api.post(`/doctors/${DOCTOR_ID}/skip-patient`, { patient_id: patient.id })
+            await fetchQueue()
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(l => ({ ...l, [`skip_${patient.id}`]: false }))
+        }
     }
 
+    async function handleFlagEmergency(patient) {
+        setLoading(l => ({ ...l, [`emergency_${patient.id}`]: true }))
+        try {
+            await api.post(`/doctors/${DOCTOR_ID}/flag-emergency`, { patient_id: patient.id })
+            await fetchQueue()
+        } catch (err) {
+            setError(err.message)
+        } finally {
+            setLoading(l => ({ ...l, [`emergency_${patient.id}`]: false }))
+        }
+    }
+
+    const waitingQueue = queue.filter(p => p.status === 'waiting')
+    const doctor = doctors.find(d => d.id === DOCTOR_ID)
     const maxBar = Math.max(...HOURLY_DATA)
 
     return (
@@ -140,12 +171,14 @@ export default function DoctorDashboard() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div>
                         <h1 style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 22, color: 'var(--text-primary)', marginBottom: 2 }}>
-                            Good evening, Dr. Priya Sharma 👋
+                            Good evening, {doctor?.name || 'Dr. Priya Sharma'} 👋
                         </h1>
-                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)' }}>Saturday, 28 Feb 2026 · General Medicine</div>
+                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)' }}>
+                            {new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })} · {doctor?.specialization || 'General Medicine'}
+                        </div>
                     </div>
                     <div style={{ display: 'flex', gap: 12 }}>
-                        {[['Patients Seen', '8', 'teal'], ['Avg Consult', '12 min', 'blue'], ['In Queue', String(queue.length), 'amber']].map(([l, v, c]) => (
+                        {[['Patients Seen', stats.completed_today || 0, 'teal'], ['In Queue', waitingQueue.length, 'amber'], ['Active', activePatient ? 1 : 0, 'blue']].map(([l, v, c]) => (
                             <div key={l} style={{ textAlign: 'center', background: 'rgba(10,22,40,0.8)', border: `1px solid rgba(${c === 'teal' ? '0,212,189' : c === 'blue' ? '61,127,255' : '255,176,32'},0.2)`, borderRadius: 10, padding: '10px 20px' }}>
                                 <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 20, fontWeight: 700, color: `var(--accent-${c})` }}>{v}</div>
                                 <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', marginTop: 2 }}>{l}</div>
@@ -153,35 +186,56 @@ export default function DoctorDashboard() {
                         ))}
                     </div>
                 </div>
+                {error && (
+                    <div style={{ marginTop: 8, padding: '8px 14px', background: 'rgba(255,71,87,0.08)', border: '1px solid rgba(255,71,87,0.3)', borderRadius: 6, fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--accent-red)' }}>
+                        ⚠ {error}
+                    </div>
+                )}
             </div>
 
             {/* 3 COLUMNS */}
             <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '300px 1fr 300px', overflow: 'hidden' }}>
                 {/* LEFT — QUEUE */}
                 <div style={{ borderRight: '1px solid rgba(0,212,189,0.08)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-                    <div style={{ padding: '16px 16px 8px', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>Today's Queue ({queue.length})</div>
+                    <div style={{ padding: '16px 16px 8px', fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
+                        Queue ({waitingQueue.length})
+                    </div>
                     <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 12px' }}>
-                        {queue.map((p, i) => (
-                            <div key={p.token} className={`patient-card${p.active ? ' active-patient' : ''}`} onClick={() => startConsult(i)}>
+                        {/* In Consultation row */}
+                        {activePatient && activePatient.status === 'in_consultation' && (
+                            <div className="patient-card active-patient">
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                                    <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 18, fontWeight: 700, color: p.active ? 'var(--accent-teal)' : 'var(--text-muted)' }}>#{p.token}</div>
+                                    <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 18, fontWeight: 700, color: 'var(--accent-teal)' }}>#{String(activePatient.token_number).padStart(3, '0')}</div>
+                                    <UrgencyBadge urgency={activePatient.urgency} />
+                                </div>
+                                <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>{activePatient.name}</div>
+                                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>{activePatient.reason}</div>
+                                <span className="badge badge-teal" style={{ fontSize: 10 }}>● IN CONSULTATION</span>
+                            </div>
+                        )}
+                        {/* Waiting patients */}
+                        {waitingQueue.map((p, i) => (
+                            <div key={p.id} className="patient-card" onClick={() => handleStartConsult(p)}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                                    <div style={{ fontFamily: 'Orbitron, monospace', fontSize: 18, fontWeight: 700, color: 'var(--text-muted)' }}>#{String(p.token_number).padStart(3, '0')}</div>
                                     <UrgencyBadge urgency={p.urgency} />
                                 </div>
                                 <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 600, fontSize: 14, color: 'var(--text-primary)', marginBottom: 3 }}>{p.name}</div>
-                                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>{p.reason} · ~{p.estTime} min</div>
-                                {p.active && (
-                                    <span className="badge badge-teal" style={{ fontSize: 10 }}>● IN CONSULTATION</span>
-                                )}
-                                {!p.active && (
-                                    <div style={{ display: 'flex', gap: 6 }}>
-                                        <button className="btn-teal" style={{ flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11 }} onClick={e => { e.stopPropagation(); startConsult(i) }}>START</button>
-                                        <button className="btn-outline" style={{ padding: '6px 8px', borderRadius: 6, fontSize: 11 }} onClick={e => { e.stopPropagation(); markUrgent(i) }}>⚑</button>
-                                        <button className="btn-red" style={{ padding: '6px 8px', borderRadius: 6, fontSize: 11 }} onClick={e => { e.stopPropagation(); skipPatient(i) }}>SKIP</button>
-                                    </div>
-                                )}
+                                <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', marginBottom: 10 }}>{p.reason} · ~{p.estimated_wait_minutes} min</div>
+                                <div style={{ display: 'flex', gap: 6 }}>
+                                    <button className="btn-teal" style={{ flex: 1, padding: '6px 8px', borderRadius: 6, fontSize: 11 }}
+                                        disabled={loading[`start_${p.id}`] || !!activePatient}
+                                        onClick={e => { e.stopPropagation(); handleStartConsult(p) }}>
+                                        {loading[`start_${p.id}`] ? '...' : 'START'}
+                                    </button>
+                                    <button className="btn-outline" style={{ padding: '6px 8px', borderRadius: 6, fontSize: 11 }}
+                                        onClick={e => { e.stopPropagation(); handleFlagEmergency(p) }}>⚑</button>
+                                    <button className="btn-red" style={{ padding: '6px 8px', borderRadius: 6, fontSize: 11 }}
+                                        onClick={e => { e.stopPropagation(); handleSkip(p) }}>SKIP</button>
+                                </div>
                             </div>
                         ))}
-                        {queue.length === 0 && (
+                        {waitingQueue.length === 0 && !activePatient && (
                             <div style={{ textAlign: 'center', padding: 32, color: 'var(--text-muted)', fontFamily: 'IBM Plex Mono', fontSize: 13 }}>
                                 <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
                                 Queue cleared for today!
@@ -198,47 +252,37 @@ export default function DoctorDashboard() {
                                 <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 12 }}>Current Patient</div>
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                                     <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg, rgba(0,212,189,0.2), rgba(0,212,189,0.05))', border: '2px solid rgba(0,212,189,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'Syne', fontWeight: 800, fontSize: 20, color: 'var(--accent-teal)' }}>
-                                        {activePatient.name.charAt(0)}
+                                        {activePatient.name?.charAt(0)}
                                     </div>
                                     <div>
                                         <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', lineHeight: 1 }}>{activePatient.name}</div>
-                                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{activePatient.age}yrs · {activePatient.gender === 'M' ? 'Male' : 'Female'}</div>
-                                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)' }}>Token <span style={{ color: 'var(--accent-teal)' }}>#{activePatient.token}</span> · {activePatient.reason}</div>
+                                        <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>Token <span style={{ color: 'var(--accent-teal)' }}>#{String(activePatient.token_number).padStart(3, '0')}</span> · {activePatient.reason}</div>
                                     </div>
                                 </div>
                             </div>
 
                             <div style={{ flex: 1, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                                {/* Urgency Gauge */}
                                 <div className="glass-card" style={{ padding: 16 }}>
                                     <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 8, textAlign: 'center' }}>Urgency Score</div>
                                     <UrgencyGauge value={activePatient.urgency} />
                                 </div>
 
-                                {/* Timer */}
                                 <div className="glass-card gradient-border" style={{ padding: 16 }}>
-                                    <ConsultTimer running={true} />
+                                    <ConsultTimer startTime={activePatient.consultation_start} />
                                 </div>
 
-                                {/* Notes */}
                                 <div>
                                     <label style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 8 }}>Consultation Notes</label>
-                                    <textarea
-                                        className="input-field"
-                                        rows={4}
-                                        placeholder="Type consultation notes here..."
-                                        value={notes}
-                                        onChange={e => setNotes(e.target.value)}
-                                        style={{ resize: 'vertical', lineHeight: 1.6 }}
-                                    />
+                                    <textarea className="input-field" rows={4} placeholder="Type consultation notes here..." value={notes} onChange={e => setNotes(e.target.value)} style={{ resize: 'vertical', lineHeight: 1.6 }} />
                                 </div>
 
-                                {/* Actions */}
                                 <div style={{ display: 'flex', gap: 10 }}>
-                                    <button onClick={markComplete} className="btn-teal" style={{ flex: 1, padding: '14px', borderRadius: 8, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                                        ✓ Mark Complete
+                                    <button onClick={handleComplete} className="btn-teal" disabled={loading.complete}
+                                        style={{ flex: 1, padding: '14px', borderRadius: 8, fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                                        {loading.complete ? '⏳ Completing...' : '✓ Mark Complete'}
                                     </button>
-                                    <button className="btn-red emergency-glow" style={{ padding: '14px 20px', borderRadius: 8, fontSize: 13 }}>
+                                    <button className="btn-red emergency-glow" style={{ padding: '14px 20px', borderRadius: 8, fontSize: 13 }}
+                                        onClick={() => handleFlagEmergency(activePatient)}>
                                         ⚠ Flag Emergency
                                     </button>
                                 </div>
@@ -267,25 +311,20 @@ export default function DoctorDashboard() {
                         </div>
                     </div>
 
-                    <div>
-                        <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: 12 }}>Patient Types</div>
-                        <DonutChart />
-                    </div>
-
                     <div className="glass-card" style={{ padding: 16, borderColor: 'rgba(0,212,189,0.2)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <span style={{ fontSize: 20 }}>⚡</span>
-                            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>Performance Insight</div>
+                            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 13, color: 'var(--text-primary)' }}>Today's Count</div>
                         </div>
                         <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
-                            You're <span style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>18% faster</span> than the clinic average today. Keep up the excellent pace!
+                            Patients seen: <span style={{ color: 'var(--accent-teal)', fontWeight: 600 }}>{stats.completed_today || 0}</span> today from this queue.
                         </div>
                         <div style={{ marginTop: 10 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>
-                                <span>You: 12 min avg</span><span>Clinic: 14.6 min avg</span>
+                                <span>Queue: {waitingQueue.length} waiting</span><span>Est: {waitingQueue.length * 12} min total</span>
                             </div>
                             <div className="progress-bar-bg">
-                                <div className="progress-bar-fill" style={{ width: '82%' }} />
+                                <div className="progress-bar-fill" style={{ width: `${Math.min(100, (stats.completed_today / 20) * 100)}%` }} />
                             </div>
                         </div>
                     </div>
