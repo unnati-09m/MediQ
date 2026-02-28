@@ -1,6 +1,6 @@
 # MediQ Production Backend
 
-A real-time intelligent clinic queue management system built with FastAPI, PostgreSQL, Redis, and Socket.IO.
+A real-time intelligent clinic queue management system built with FastAPI, PostgreSQL, Redis, Socket.IO, Groq AI (Llama 3), and React (Vite).
 
 ---
 
@@ -20,10 +20,13 @@ brew services start postgresql@16
 /opt/homebrew/opt/postgresql@16/bin/createuser -s mediq
 /opt/homebrew/opt/postgresql@16/bin/createdb -U mediq mediq
 
-# 4. Set up Python virtualenv
+# 4. Set up Python virtualenv & .env file
 cd backend
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
+
+# Create a .env file locally with GROQ_API_KEY for ML Triage:
+# GROQ_API_KEY=your_groq_api_key_here
 
 # 5. Install frontend dependencies
 cd ..
@@ -138,6 +141,8 @@ MediQ/
 │   ├── websocket_manager.py ← Socket.IO server + broadcast helpers
 │   ├── queue_engine.py      ← Priority queue engine
 │   ├── doctor_engine.py     ← Doctor assignment logic
+│   ├── ml_engine/           ← AI Triage Engine
+│       └── groq_engine.py   ← Groq LLM Integration (Llama 3)
 │   ├── celery_tasks.py      ← Background task definitions
 │   ├── seed.py              ← Initial data seed
 │   ├── requirements.txt
@@ -146,7 +151,7 @@ MediQ/
 │       ├── doctors.py       ← /api/doctors/*
 │       └── staff.py         ← /api/staff/*
 │
-├── src/
+├── src/                   ← React (Vite) Frontend
 │   ├── api.js               ← Axios client (baseURL: localhost:8000/api)
 │   ├── socket.js            ← Socket.IO client singleton
 │   └── pages/
