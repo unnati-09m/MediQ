@@ -2,13 +2,6 @@ import { useState, useEffect } from 'react'
 import api from '../api'
 import socket from '../socket'
 
-const VISIT_TYPES = [
-    { id: 'checkup', emoji: '🩺', label: 'General Checkup', color: 'teal', time: 15 },
-    { id: 'fever', emoji: '🤒', label: 'Fever / Cold', color: 'blue', time: 12 },
-    { id: 'followup', emoji: '💊', label: 'Follow-up / Prescription', color: 'teal', time: 10 },
-    { id: 'specialist', emoji: '🔬', label: 'Specialist Consult', color: 'blue', time: 20 },
-    { id: 'emergency', emoji: '🚨', label: 'Emergency', color: 'red', time: 5 },
-]
 
 function FloatingToken({ token, style, className }) {
     return (
@@ -49,7 +42,7 @@ function LiveStat({ label, value, unit }) {
 }
 
 export default function PatientRegistration() {
-    const [form, setForm] = useState({ name: '', phone: '', visitType: '', urgency: 5 })
+    const [form, setForm] = useState({ name: '', phone: '', reason: '' })
     const [tokenData, setTokenData] = useState(null)
     const [tokenVisible, setTokenVisible] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -78,24 +71,17 @@ export default function PatientRegistration() {
     }
     const sliderThumbColor = form.urgency <= 3 ? '#00D4BD' : form.urgency <= 6 ? '#FFB020' : '#FF4757'
 
-    // Map visit type label to reason string
-    const getReasonString = (visitTypeId) => {
-        const vt = VISIT_TYPES.find(v => v.id === visitTypeId)
-        return vt ? vt.label : visitTypeId
-    }
-
     async function handleSubmit(e) {
         e.preventDefault()
-        if (!form.name || !form.phone || !form.visitType) return
+        if (!form.name || !form.phone || !form.reason) return
         setLoading(true)
         setError(null)
         try {
-            const urgency = form.visitType === 'emergency' ? 10 : form.urgency
             const res = await api.post('/patients/register', {
                 name: form.name,
                 phone: form.phone,
-                reason: getReasonString(form.visitType),
-                urgency,
+                reason: form.reason,
+                urgency: 5, // Default urgency, will be updated by backend Groq integration
             })
             setTokenData(res.data)
             setTokenVisible(true)
@@ -108,7 +94,7 @@ export default function PatientRegistration() {
 
     function handleClose() {
         setTokenVisible(false)
-        setForm({ name: '', phone: '', visitType: '', urgency: 5 })
+        setForm({ name: '', phone: '', reason: '' })
         setError(null)
     }
 
@@ -187,32 +173,9 @@ export default function PatientRegistration() {
 
                         <div>
                             <label style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'block', marginBottom: 10 }}>Reason for Visit</label>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                                {VISIT_TYPES.map(vt => (
-                                    <div key={vt.id} className={`visit-card${vt.id === 'emergency' ? ' emergency' : ''}${form.visitType === vt.id ? ' selected' : ''}`} onClick={() => setForm(f => ({ ...f, visitType: vt.id }))} style={{ fontSize: 11, padding: '12px 8px' }}>
-                                        <div style={{ fontSize: 22, marginBottom: 6 }}>{vt.emoji}</div>
-                                        <div style={{ lineHeight: 1.3, color: 'inherit' }}>{vt.label}</div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div>
-                            <label style={{ fontFamily: 'IBM Plex Mono', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                                <span>Pain / Urgency Level</span>
-                                <span style={{ color: form.urgency <= 3 ? 'var(--accent-teal)' : form.urgency <= 6 ? 'var(--accent-amber)' : 'var(--accent-red)' }}>
-                                    {form.urgency}/10 — {form.urgency <= 3 ? 'Mild' : form.urgency <= 6 ? 'Moderate' : 'Severe'}
-                                </span>
-                            </label>
                             <div style={{ position: 'relative' }}>
-                                <div style={{ height: 6, borderRadius: 3, background: sliderColor(), marginBottom: 6 }} />
-                                <input type="range" min="1" max="10" step="1" className="ekg-slider" value={form.urgency}
-                                    onChange={e => setForm(f => ({ ...f, urgency: parseInt(e.target.value) }))}
-                                    style={{ position: 'absolute', top: -1, left: 0, background: 'transparent', '--thumb-color': sliderThumbColor }}
-                                />
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-dim)', marginTop: 8 }}>
-                                <span>1 — No pain</span><span>5 — Moderate</span><span>10 — Severe</span>
+                                <span style={{ position: 'absolute', left: 14, top: 14, fontSize: 16, opacity: 0.6 }}>📝</span>
+                                <textarea className="input-field" style={{ paddingLeft: 42, height: 80, resize: 'none', paddingTop: 14 }} placeholder="Please describe your symptoms/reason for visit..." value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} required />
                             </div>
                         </div>
 

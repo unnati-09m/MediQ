@@ -50,7 +50,7 @@ export default function App() {
                     }}>+</div>
                     {!collapsed && (
                         <div style={{ overflow: 'hidden' }}>
-                            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 16, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1 }}>MediFlow</div>
+                            <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 800, fontSize: 16, color: 'var(--text-primary)', letterSpacing: '-0.01em', lineHeight: 1 }}>MediQ</div>
                             <div style={{ fontFamily: 'IBM Plex Mono, monospace', fontSize: 10, color: 'var(--accent-teal)', marginTop: 2 }}>Queue System v2.0</div>
                         </div>
                     )}
@@ -99,7 +99,7 @@ export default function App() {
                 {!collapsed && (
                     <div style={{ marginTop: 16, padding: 12, background: 'rgba(0,212,189,0.04)', borderRadius: 8, border: '1px solid rgba(0,212,189,0.1)' }}>
                         <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)', marginBottom: 4 }}>CLINIC</div>
-                        <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 12, color: 'var(--text-primary)' }}>MediFlow Clinic</div>
+                        <div style={{ fontFamily: 'Syne, sans-serif', fontWeight: 700, fontSize: 12, color: 'var(--text-primary)' }}>MediQ Clinic</div>
                         <div style={{ fontFamily: 'IBM Plex Mono', fontSize: 10, color: 'var(--text-muted)' }}>Mumbai, Maharashtra</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 8 }}>
                             <span className="pulse-dot teal" />

@@ -22,6 +22,7 @@ from ..queue_engine import (
 )
 from ..doctor_engine import get_optimal_doctor, assign_doctor_to_patient, format_doctor_response, get_all_doctors
 from ..websocket_manager import broadcast_queue_updated, broadcast_patient_status_changed
+from ..ml_engine.groq_engine import analyze_urgency
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -42,13 +43,17 @@ async def register_patient(payload: PatientRegisterRequest, db: AsyncSession = D
     # 1. Generate sequential token number
     token_number = await get_next_token()
 
+    # Determine urgency automatically if reason is provided
+    # The frontend is updated to send reason instead of hardcoded visitType
+    determined_urgency = await analyze_urgency(payload.reason)
+
     # 2. Save patient to DB
     patient = Patient(
         token_number=token_number,
         name=payload.name,
         phone=payload.phone,
         reason=payload.reason,
-        urgency=payload.urgency,
+        urgency=determined_urgency,
         status=PatientStatus.WAITING,
         created_at=datetime.now(timezone.utc),
     )
@@ -75,7 +80,7 @@ async def register_patient(payload: PatientRegisterRequest, db: AsyncSession = D
     event = EventLog(
         event_type="patient_registered",
         reference_id=patient.id,
-        metadata_json=json.dumps({"token": token_number, "urgency": payload.urgency}),
+        metadata_json=json.dumps({"token": token_number, "urgency": determined_urgency, "ai_rated": True}),
     )
     db.add(event)
     await db.commit()
