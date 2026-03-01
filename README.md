@@ -270,6 +270,8 @@ Multi-clinic support
 
 SMS notifications
 
+Live Website: https://mediq-pink.vercel.app/
+
 👥 Team – Error 404
 
 Dheeraj Jadhav - Queue Algorithm & Integration
