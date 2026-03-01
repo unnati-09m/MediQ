@@ -1,166 +1,274 @@
-# MediQ Production Backend
+# 🏥 MediQ – Smart Clinic Queue Management System
 
-A real-time intelligent clinic queue management system built with FastAPI, PostgreSQL, Redis, Socket.IO, Groq AI (Llama 3), and React (Vite).
+> 🚀 Built at OverClock 24 Hours Hackathon  
+> 👨‍💻 Team: Error 404  
+
+MediQ is a real-time smart clinic queue management system designed to reduce long waiting times in small and mid-sized clinics.
+
+As first-year engineering students, we wanted to build a practical solution that solves a real-world healthcare problem using AI, real-time systems, and database concepts.
 
 ---
 
-## Quick Start
+# 🌐 Live Deployment
 
-### First-Time Setup
+### 🔹 Frontend (Vercel)
+👉 https://mediq-pink.vercel.app/
+
+### 🔹 Backend API (Render)
+👉 https://mediq-b06o.onrender.com/docs#/
+
+You can explore all backend APIs using the Swagger documentation link above.
+
+---
+
+# 📌 Problem Statement
+
+In many clinics:
+
+- Patients are handled on a first-come-first-serve basis
+- Emergency cases are not properly prioritized
+- Doctors may get overloaded
+- No real-time queue visibility
+- Manual record handling
+
+This leads to long waiting times and poor management.
+
+---
+
+# 💡 Our Solution
+
+MediQ introduces:
+
+- 🧠 AI-powered symptom triage (Groq – Llama 3)
+- ⚡ Smart priority-based queue system
+- 📡 Real-time updates using Socket.IO
+- 👨‍⚕️ Doctor workload balancing
+- 🧑‍💼 Staff control dashboard
+- 📊 Activity logging system
+
+Instead of a normal queue, we built a dynamic priority engine.
+
+---
+
+# 🧠 Priority Algorithm
+
+We use:
+
+priority_score = (urgency × 0.6) + (wait_minutes × 0.3) + (doctor_load × 0.1)
+
+
+This ensures:
+
+- Emergency patients move first
+- Waiting time increases priority gradually
+- Doctors are balanced equally
+
+We store this in Redis using Sorted Sets (ZSET) for high performance.
+
+---
+
+# 🖥 Portal Screenshots
+
+## 1️⃣ Patient Registration Page
+![Patient Entry](./assets/patient-entry.png)
+
+---
+
+## 2️⃣ Token Confirmation Page
+![Token Page](./assets/token-page.png)
+
+---
+
+## 3️⃣ Live Queue Display
+![Live Queue](./assets/live-queue.png)
+
+---
+
+## 4️⃣ Doctor Dashboard
+![Doctor Dashboard](./assets/doctor-dashboard.png)
+
+---
+
+## 5️⃣ Staff Control Centre
+![Staff Dashboard](./assets/staff-dashboard.png)
+
+---
+
+# 🏗 System Architecture
+
+Frontend (React + Vite)  
+⬇  
+FastAPI Backend  
+⬇  
+PostgreSQL (Database)  
+⬇  
+Redis (Priority Queue)  
+⬇  
+Socket.IO (Real-time Communication)  
+⬇  
+Groq AI (Llama 3)
+
+---
+
+# 🛠 Technologies Used
+
+## 🔹 Backend
+- FastAPI
+- PostgreSQL
+- Async SQLAlchemy
+- Redis
+- Socket.IO
+- Celery
+- Groq API (Llama 3)
+
+## 🔹 Frontend
+- React (Vite)
+- Axios
+- Socket.IO Client
+
+## 🔹 Deployment
+- Vercel (Frontend)
+- Render (Backend)
+- PostgreSQL
+- Redis
+
+---
+
+# ⚙️ How to Run Locally
+
+## 1️⃣ Install Dependencies (macOS)
 
 ```bash
-# 1. Install system dependencies (macOS)
 brew install redis postgresql@16
-
-# 2. Start services
 brew services start redis
 brew services start postgresql@16
 
-# 3. Create database
-/opt/homebrew/opt/postgresql@16/bin/createuser -s mediq
-/opt/homebrew/opt/postgresql@16/bin/createdb -U mediq mediq
+2️⃣ Create Database
 
-# 4. Set up Python virtualenv & .env file
+createuser -s mediq
+createdb -U mediq mediq
+
+3️⃣ Backend Setup
 cd backend
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 
-# Create a .env file locally with GROQ_API_KEY for ML Triage:
-# GROQ_API_KEY=your_groq_api_key_here
+Create .env file inside backend folder:
 
-# 5. Install frontend dependencies
-cd ..
-npm install
-```
+GROQ_API_KEY=your_groq_api_key_here
 
-### Running the System
-
-**Terminal 1 — Backend API:**
-```bash
+4️⃣ Run Backend
 ./start.sh
-# OR manually:
+
+OR
+
 backend/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
-```
-
-**Terminal 2 — Frontend (already running):**
-```bash
+5️⃣ Run Frontend
+npm install
 npm run dev
-```
 
-The system auto-seeds 3 doctors and 5 demo patients on first startup.
+On first startup, the system auto-seeds:
 
----
+3 doctors
 
-## API Reference
+5 demo patients
 
-### Health & Root
-```bash
-GET  /                       # System info
-GET  /health                 # Redis + DB health check
-GET  /docs                   # Interactive Swagger UI
-```
+📡 API Endpoints
+Patients
 
-### Patients
-```bash
-POST /api/patients/register  # Register new patient (generates token)
-GET  /api/patients/queue     # Live priority-ordered queue
-GET  /api/patients/stats     # Queue statistics
-GET  /api/patients/{id}      # Single patient by ID
-```
+POST /api/patients/register
 
-**Register Patient:**
-```bash
-curl -X POST http://localhost:8000/api/patients/register \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"John Doe","phone":"9999999999","reason":"Fever / Cold","urgency":7}'
-```
+GET /api/patients/queue
 
-### Doctors
-```bash
-GET  /api/doctors                           # List all doctors
-POST /api/doctors                           # Create doctor
-POST /api/doctors/{id}/start-consultation   # Start consult {patient_id}
-POST /api/doctors/{id}/complete-consultation # Complete consult
-POST /api/doctors/{id}/skip-patient         # Skip {patient_id}
-POST /api/doctors/{id}/flag-emergency       # Flag {patient_id} as emergency
-```
+GET /api/patients/stats
 
-**Start Consultation:**
-```bash
-curl -X POST http://localhost:8000/api/doctors/1/start-consultation \
-  -H 'Content-Type: application/json' \
-  -d '{"patient_id": 3}'
-```
+Doctors
 
-### Staff Control
-```bash
-POST /api/staff/register-walkin        # Walk-in patient registration
-POST /api/staff/add-emergency          # Emergency patient (urgency=10)
-POST /api/staff/mark-noshow/{id}       # Mark patient as no-show
-PUT  /api/staff/toggle-doctor/{id}     # Toggle doctor availability
-POST /api/staff/rebalance              # Force queue priority recalculation
-GET  /api/staff/logs                   # Event activity log
-```
+POST /api/doctors/{id}/start-consultation
 
----
+POST /api/doctors/{id}/complete-consultation
 
-## Priority Queue Formula
+POST /api/doctors/{id}/skip-patient
 
-```
-priority_score = (urgency × 0.6) + (wait_minutes × 0.3) + (doctor_load × 0.1)
-```
+POST /api/doctors/{id}/flag-emergency
 
-Stored in Redis as `-score` (negative) so `ZRANGE` ascending = highest priority first.
+Staff
 
----
+POST /api/staff/register-walkin
 
-## Socket.IO Events
+POST /api/staff/add-emergency
 
-Connect: `http://localhost:8000` (path: `/socket.io`)
+POST /api/staff/rebalance
 
-| Event | Direction | Payload |
-|-------|-----------|---------|
-| `queue_updated` | Server → Client | `{queue: [...], stats: {...}}` |
-| `patient_status_changed` | Server → Client | `{patient_id, token_number, status, doctor_name}` |
-| `doctor_status_changed` | Server → Client | `{doctor_id, doctor_name, is_active, is_on_break}` |
-| `emergency_added` | Server → Client | `{patient_id, token_number, name, urgency}` |
+GET /api/staff/logs
 
----
+Swagger Docs:
 
-## Project Structure
-
-```
+https://mediq-b06o.onrender.com/docs#/
+📂 Project Structure
 MediQ/
 ├── backend/
-│   ├── main.py              ← FastAPI app + Socket.IO ASGI mount
-│   ├── config.py            ← Settings (pydantic-settings)
-│   ├── database.py          ← Async SQLAlchemy engine
-│   ├── models.py            ← Patient, Doctor, EventLog ORM models
-│   ├── schemas.py           ← Pydantic v2 request/response schemas
-│   ├── redis_client.py      ← Redis client + ZSET helpers
-│   ├── websocket_manager.py ← Socket.IO server + broadcast helpers
-│   ├── queue_engine.py      ← Priority queue engine
-│   ├── doctor_engine.py     ← Doctor assignment logic
-│   ├── ml_engine/           ← AI Triage Engine
-│       └── groq_engine.py   ← Groq LLM Integration (Llama 3)
-│   ├── celery_tasks.py      ← Background task definitions
-│   ├── seed.py              ← Initial data seed
+│   ├── main.py
+│   ├── config.py
+│   ├── database.py
+│   ├── models.py
+│   ├── schemas.py
+│   ├── redis_client.py
+│   ├── websocket_manager.py
+│   ├── queue_engine.py
+│   ├── doctor_engine.py
+│   ├── ml_engine/
+│   │   └── groq_engine.py
+│   ├── celery_tasks.py
+│   ├── seed.py
 │   ├── requirements.txt
 │   └── routes/
-│       ├── patients.py      ← /api/patients/*
-│       ├── doctors.py       ← /api/doctors/*
-│       └── staff.py         ← /api/staff/*
+│       ├── patients.py
+│       ├── doctors.py
+│       └── staff.py
 │
-├── src/                   ← React (Vite) Frontend
-│   ├── api.js               ← Axios client (baseURL: localhost:8000/api)
-│   ├── socket.js            ← Socket.IO client singleton
+├── src/
+│   ├── api.js
+│   ├── socket.js
 │   └── pages/
-│       ├── PatientRegistration.jsx  ← Wired to POST /api/patients/register
-│       ├── LiveQueueDisplay.jsx     ← Real-time Socket.IO queue display
-│       ├── DoctorDashboard.jsx      ← Doctor actions via API + Socket.IO
-│       └── StaffDashboard.jsx       ← Staff control via API + Socket.IO
+│       ├── PatientRegistration.jsx
+│       ├── LiveQueueDisplay.jsx
+│       ├── DoctorDashboard.jsx
+│       └── StaffDashboard.jsx
 │
-├── docker-compose.yml       ← PostgreSQL + Redis (for Docker users)
-├── start.sh                 ← One-command startup script
+├── docker-compose.yml
+├── start.sh
 └── package.json
-```
+🚀 Why This Project Stands Out
+
+Solves real healthcare problem
+
+AI integration
+
+Real-time queue system
+
+Optimized using Redis
+
+Full-stack architecture
+
+Deployed live
+
+🔮 Future Improvements
+
+Mobile App version
+
+Advanced ML health prediction
+
+Cloud scaling
+
+Multi-clinic support
+
+SMS notifications
+
+👥 Team – Error 404
+
+Dheeraj Jadhav
+
+Unnati Mehatkar
+
+Sahil Shingate
