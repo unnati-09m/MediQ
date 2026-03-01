@@ -70,8 +70,8 @@ We store this in Redis using Sorted Sets (ZSET) for high performance.
 # 🖥 Portal Screenshots
 
 ## 1️⃣ Patient Registration Page
-![Patient Entry](<img width="1512" height="982" alt="Screenshot 2026-03-01 at 10 00 59 AM" src="https://github.com/user-attachments/assets/94a17c76-3080-474a-8702-2cbebcd1f777" />
-)
+<img width="1512" height="823" alt="Screenshot 2026-03-01 at 9 55 00 AM" src="https://github.com/user-attachments/assets/793190b6-dd7b-4f42-b677-8a5244330bd7" />
+
 
 ---
 
