@@ -19,6 +19,10 @@ As first-year engineering students, we wanted to build a practical solution that
 
 You can explore all backend APIs using the Swagger documentation link above.
 
+
+### 🔹 Demo video
+👉 https://drive.google.com/file/d/1S57-DnymQ86RMp0mxOzr9ZmLpnDd4n_d/view?usp=sharing
+
 ---
 
 # 📌 Problem Statement
