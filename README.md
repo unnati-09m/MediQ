@@ -23,6 +23,8 @@ You can explore all backend APIs using the Swagger documentation link above.
 ### 🔹 Demo video
 👉 https://drive.google.com/file/d/1S57-DnymQ86RMp0mxOzr9ZmLpnDd4n_d/view?usp=sharing
 
+### 🔹 Ppt link
+👉 https://docs.google.com/presentation/d/1GZA4uh341ykFDjfnK4VWzrkG9PkTd1uO/edit?usp=sharing&ouid=109510066217554712801&rtpof=true&sd=true
 ---
 
 # 📌 Problem Statement
