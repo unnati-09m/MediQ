@@ -95,3 +95,6 @@ Thumbs.db
 # =========================
 *.tsbuildinfo
 *.tgz
+
+.venv/
+backend/.venv/

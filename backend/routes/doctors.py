@@ -8,16 +8,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..database import get_db
-from ..models import Patient, PatientStatus, Doctor, EventLog
-from ..schemas import (
+from database import get_db
+from models import Patient, PatientStatus, Doctor, EventLog
+from schemas import (
     DoctorResponse,
     DoctorCreateRequest,
     StartConsultationRequest,
     FlagEmergencyRequest,
     SkipPatientRequest,
 )
-from ..doctor_engine import (
+from doctor_engine import (
     get_all_doctors,
     get_doctor_by_id,
     start_consultation,
@@ -25,14 +25,14 @@ from ..doctor_engine import (
     auto_assign_next_patient,
     format_doctor_response,
 )
-from ..queue_engine import (
+from queue_engine import (
     remove_patient_from_queue,
     add_patient_to_queue,
     recalculate_queue,
     get_ordered_queue,
     get_queue_stats,
 )
-from ..websocket_manager import (
+from websocket_manager import (
     broadcast_queue_updated,
     broadcast_patient_status_changed,
     broadcast_doctor_status_changed,
@@ -233,12 +233,12 @@ async def skip_patient(
 
     # Reduce effective urgency for priority (not stored permanently)
     # We add them back with reduced score (not updating DB urgency)
-    from ..queue_engine import compute_priority, add_to_queue
+    from queue_engine import compute_priority, add_to_queue
     reduced_urgency = max(1, patient.urgency - 2)
     new_score = compute_priority(reduced_urgency, patient.created_at, 0.0)
     # Override with reduced score (below other patients of same urgency)
     new_score = max(0.1, new_score * 0.5)
-    from ..redis_client import add_to_queue as redis_add
+    from redis_client import add_to_queue as redis_add
     await redis_add(patient.id, new_score)
 
     event = EventLog(

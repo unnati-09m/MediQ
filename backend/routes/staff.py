@@ -8,11 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..database import get_db
-from ..models import Patient, PatientStatus, Doctor, EventLog
-from ..schemas import WalkInRequest, EmergencyRequest, ToggleDoctorRequest
-from ..redis_client import get_next_token, queue_length
-from ..queue_engine import (
+from database import get_db
+from models import Patient, PatientStatus, Doctor, EventLog
+from schemas import WalkInRequest, EmergencyRequest, ToggleDoctorRequest
+from redis_client import get_next_token, queue_length
+from queue_engine import (
     add_patient_to_queue,
     recalculate_queue,
     remove_patient_from_queue,
@@ -21,7 +21,7 @@ from ..queue_engine import (
     estimate_wait_time,
     get_queue_position,
 )
-from ..doctor_engine import (
+from doctor_engine import (
     get_optimal_doctor,
     assign_doctor_to_patient,
     reassign_waiting_patients,
@@ -29,7 +29,7 @@ from ..doctor_engine import (
     get_all_doctors,
     format_doctor_response,
 )
-from ..websocket_manager import (
+from websocket_manager import (
     broadcast_queue_updated,
     broadcast_patient_status_changed,
     broadcast_doctor_status_changed,

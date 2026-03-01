@@ -8,7 +8,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Doctor, Patient, PatientStatus
+from models import Doctor, Patient, PatientStatus
 
 
 async def get_all_doctors(db: AsyncSession) -> List[Doctor]:
@@ -97,7 +97,7 @@ async def auto_assign_next_patient(db: AsyncSession, doctor: Doctor) -> Optional
     After a consultation ends, auto-assign the next highest-priority WAITING patient
     that is not yet assigned to any doctor.
     """
-    from .redis_client import get_queue_ordered, remove_from_queue
+    from redis_client import get_queue_ordered, remove_from_queue
 
     ordered = await get_queue_ordered()
     if not ordered:

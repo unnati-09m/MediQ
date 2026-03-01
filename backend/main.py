@@ -11,45 +11,68 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
 from pathlib import Path
-load_dotenv(Path(__file__).parent / ".env")
+env_path = Path(__file__).parent / ".env"
+if env_path.exists():
+    load_dotenv(env_path)
 
-from .config import settings
-from .database import create_tables
-from .redis_client import init_redis, close_redis
-from .websocket_manager import sio
-from .routes import patients as patients_router
-from .routes import doctors as doctors_router
-from .routes import staff as staff_router
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from config import settings
+from database import create_tables
+from redis_client import init_redis, close_redis
+from websocket_manager import sio
+from routes import patients as patients_router
+from routes import doctors as doctors_router
+from routes import staff as staff_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan: startup → yield → shutdown."""
     # ─── Startup ───────────────────────────────────────────────────────────────
-    print("[MediQ] Starting up...")
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    logger.info("[MediQ] Starting up...")
 
     # 1. Create DB tables
-    await create_tables()
-    print("[MediQ] Database tables ready")
+    try:
+        await create_tables()
+        logger.info("[MediQ] Database tables ready")
+    except Exception as e:
+        logger.error(f"[MediQ] Database initialization failed: {e}")
+        raise e  # Crash clearly if DB fails
 
     # 2. Connect Redis
-    await init_redis()
-    print("[MediQ] Redis connected")
+    try:
+        await init_redis()
+        logger.info("[MediQ] Redis connected")
+    except Exception as e:
+        logger.warning(f"[MediQ] Redis connection failed, continuing without it: {e}")
 
     # 3. Seed initial data if DB is empty
-    from .seed import seed_if_empty
-    await seed_if_empty()
-    print("[MediQ] Seed check complete")
+    try:
+        from seed import seed_if_empty
+        await seed_if_empty()
+        logger.info("[MediQ] Seed check complete")
+    except Exception as e:
+        logger.error(f"[MediQ] Seeding failed: {e}")
 
     yield
 
     # ─── Shutdown ─────────────────────────────────────────────────────────────
-    print("[MediQ] Shutting down...")
-    await close_redis()
+    logger.info("[MediQ] Shutting down...")
+    try:
+        await close_redis()
+    except Exception as e:
+        logger.error(f"[MediQ] Redis shutdown failed: {e}")
 
 
 # Create the base FastAPI application
-_fastapi_app = FastAPI(
+app = FastAPI(
     title="MediQ API",
     description="Real-time intelligent clinic queue management system",
     version="1.0.0",
@@ -58,36 +81,44 @@ _fastapi_app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the Vite frontend
-_fastapi_app.add_middleware(
+from fastapi.responses import JSONResponse
+from fastapi import Request
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import logging
+    logging.error(f"Global exception: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"message": "Internal server error. Please try again later."},
+    )
+
+# CORS Setup
+# Restrict to frontend domain after Vercel deployment.
+app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list + ["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include API routers
-_fastapi_app.include_router(patients_router.router, prefix="/api")
-_fastapi_app.include_router(doctors_router.router, prefix="/api")
-_fastapi_app.include_router(staff_router.router, prefix="/api")
+app.include_router(patients_router.router, prefix="/api")
+app.include_router(doctors_router.router, prefix="/api")
+app.include_router(staff_router.router, prefix="/api")
 
 
-@_fastapi_app.get("/")
+@app.get("/")
 async def root():
     return {
-        "service": "MediQ Backend",
-        "version": "1.0.0",
-        "status": "live",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "docs": "/docs",
+        "status": "running"
     }
 
 
-@_fastapi_app.get("/health")
+@app.get("/health")
 async def health():
     """Health check for load balancers / monitoring."""
-    from .redis_client import get_redis
+    from redis_client import get_redis
     try:
         r = get_redis()
         await r.ping()
@@ -105,8 +136,7 @@ async def health():
 # ─── Mount Socket.IO on the FastAPI ASGI app ──────────────────────────────────
 # Socket.IO requests go to:  /socket.io/...
 # REST API requests go to:   /api/...
-app = socketio.ASGIApp(
+app.mount("/socket.io", socketio.ASGIApp(
     socketio_server=sio,
-    other_asgi_app=_fastapi_app,
-    socketio_path="/socket.io",
-)
+    socketio_path=""
+))

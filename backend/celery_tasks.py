@@ -4,7 +4,7 @@ celery_tasks.py – Background tasks using Celery + Redis broker
 from celery import Celery
 from celery.schedules import crontab
 
-from .config import settings
+from config import settings
 
 celery_app = Celery(
     "mediq",
@@ -42,11 +42,11 @@ def recalculate_queue_task(self):
     This is a sync task that creates its own event loop.
     """
     import asyncio
-    from .database import AsyncSessionLocal
-    from .queue_engine import recalculate_queue
-    from .websocket_manager import broadcast_queue_updated
-    from .doctor_engine import get_all_doctors, format_doctor_response
-    from .queue_engine import get_ordered_queue, get_queue_stats
+    from database import AsyncSessionLocal
+    from queue_engine import recalculate_queue
+    from websocket_manager import broadcast_queue_updated
+    from doctor_engine import get_all_doctors, format_doctor_response
+    from queue_engine import get_ordered_queue, get_queue_stats
 
     async def _run():
         async with AsyncSessionLocal() as db:
@@ -77,9 +77,9 @@ def reset_daily_counters(self):
     Patients from the previous day are NOT deleted — just stats reset.
     """
     import asyncio
-    from .database import AsyncSessionLocal
-    from .redis_client import reset_token_counter, clear_queue
-    from .models import Doctor
+    from database import AsyncSessionLocal
+    from redis_client import reset_token_counter, clear_queue
+    from models import Doctor
     from sqlalchemy import update
 
     async def _run():

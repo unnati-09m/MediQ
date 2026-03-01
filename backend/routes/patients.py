@@ -8,11 +8,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from ..database import get_db
-from ..models import Patient, PatientStatus, EventLog
-from ..schemas import PatientRegisterRequest, PatientResponse, RegistrationResponse, QueueEntry
-from ..redis_client import get_next_token, queue_length
-from ..queue_engine import (
+from database import get_db
+from models import Patient, PatientStatus, EventLog
+from schemas import PatientRegisterRequest, PatientResponse, RegistrationResponse, QueueEntry
+from redis_client import get_next_token, queue_length
+from queue_engine import (
     add_patient_to_queue,
     get_ordered_queue,
     get_queue_stats,
@@ -20,9 +20,9 @@ from ..queue_engine import (
     estimate_wait_time,
     get_queue_position,
 )
-from ..doctor_engine import get_optimal_doctor, assign_doctor_to_patient, format_doctor_response, get_all_doctors
-from ..websocket_manager import broadcast_queue_updated, broadcast_patient_status_changed
-from ..ml_engine.groq_engine import analyze_urgency
+from doctor_engine import get_optimal_doctor, assign_doctor_to_patient, format_doctor_response, get_all_doctors
+from websocket_manager import broadcast_queue_updated, broadcast_patient_status_changed
+from ml_engine.groq_engine import analyze_urgency
 
 router = APIRouter(prefix="/patients", tags=["patients"])
 
@@ -92,7 +92,7 @@ async def register_patient(payload: PatientRegisterRequest, db: AsyncSession = D
     doctor_name = None
     if patient.assigned_doctor_id:
         from sqlalchemy import select as sa_select
-        from ..models import Doctor
+        from models import Doctor
         res = await db.execute(sa_select(Doctor.name).where(Doctor.id == patient.assigned_doctor_id))
         doctor_name = res.scalar_one_or_none()
 
@@ -137,7 +137,7 @@ async def get_queue(db: AsyncSession = Depends(get_db)):
     )
     consulting = result.scalars().all()
 
-    from ..models import Doctor
+    from models import Doctor
     consulting_entries = []
     for p in consulting:
         doc_name = None

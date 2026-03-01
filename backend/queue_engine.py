@@ -10,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from .models import Patient, PatientStatus, Doctor
-from .redis_client import (
+from models import Patient, PatientStatus, Doctor
+from redis_client import (
     add_to_queue,
     remove_from_queue,
     get_queue_ordered,
@@ -151,7 +151,7 @@ async def recalculate_queue(db: AsyncSession) -> None:
 async def get_queue_stats(db: AsyncSession) -> dict:
     """Compute live stats for the queue."""
     from sqlalchemy import func as sqlfunc
-    from .models import PatientStatus
+    from models import PatientStatus
 
     # Count by status
     result = await db.execute(

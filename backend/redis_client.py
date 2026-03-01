@@ -3,7 +3,7 @@ redis_client.py – Async Redis client and ZSET queue helpers
 """
 from typing import Optional, List, Tuple
 import redis.asyncio as aioredis
-from .config import settings
+from config import settings
 
 # Module-level client (initialised in main.py lifespan)
 redis_client: Optional[aioredis.Redis] = None

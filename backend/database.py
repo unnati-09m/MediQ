@@ -3,7 +3,7 @@ database.py – Async SQLAlchemy engine and session factory
 """
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
-from .config import settings
+from config import settings
 
 engine = create_async_engine(
     settings.DATABASE_URL,
@@ -42,5 +42,5 @@ async def get_db():
 async def create_tables():
     """Create all tables on startup."""
     async with engine.begin() as conn:
-        from . import models  # noqa — ensure models are imported
+        import models  # noqa — ensure models are imported
         await conn.run_sync(Base.metadata.create_all)

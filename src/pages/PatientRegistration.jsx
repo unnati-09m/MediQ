@@ -85,8 +85,9 @@ export default function PatientRegistration() {
             })
             setTokenData(res.data)
             setTokenVisible(true)
-        } catch (err) {
-            setError(err.message)
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+            setError(error.message);
         } finally {
             setLoading(false)
         }

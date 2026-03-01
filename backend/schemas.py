@@ -6,7 +6,7 @@ from typing import Optional, List
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import PatientStatus
+from models import PatientStatus
 
 
 # ─────────────────────────────── Patient Schemas ──────────────────────────────

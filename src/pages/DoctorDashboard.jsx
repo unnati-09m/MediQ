@@ -83,7 +83,9 @@ export default function DoctorDashboard() {
             setQueue(qRes.data)
             setDoctors(dRes.data)
             setStats(sRes.data)
-        } catch { }
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+        }
     }
 
     useEffect(() => {
@@ -114,8 +116,9 @@ export default function DoctorDashboard() {
             await api.post(`/doctors/${DOCTOR_ID}/start-consultation`, { patient_id: patient.id })
             setActivePatientId(patient.id)
             await fetchQueue()
-        } catch (err) {
-            setError(err.message)
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+            setError(error.message);
         } finally {
             setLoading(l => ({ ...l, [`start_${patient.id}`]: false }))
         }
@@ -129,8 +132,9 @@ export default function DoctorDashboard() {
             setActivePatientId(null)
             setNotes('')
             await fetchQueue()
-        } catch (err) {
-            setError(err.message)
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+            setError(error.message);
         } finally {
             setLoading(l => ({ ...l, complete: false }))
         }
@@ -141,8 +145,9 @@ export default function DoctorDashboard() {
         try {
             await api.post(`/doctors/${DOCTOR_ID}/skip-patient`, { patient_id: patient.id })
             await fetchQueue()
-        } catch (err) {
-            setError(err.message)
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+            setError(error.message);
         } finally {
             setLoading(l => ({ ...l, [`skip_${patient.id}`]: false }))
         }
@@ -153,8 +158,9 @@ export default function DoctorDashboard() {
         try {
             await api.post(`/doctors/${DOCTOR_ID}/flag-emergency`, { patient_id: patient.id })
             await fetchQueue()
-        } catch (err) {
-            setError(err.message)
+        } catch (error) {
+            console.error("API Error:", error.response?.data || error.message);
+            setError(error.message);
         } finally {
             setLoading(l => ({ ...l, [`emergency_${patient.id}`]: false }))
         }

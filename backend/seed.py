@@ -6,10 +6,10 @@ from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import select
 
-from .database import AsyncSessionLocal
-from .models import Doctor, Patient, PatientStatus
-from .redis_client import get_next_token, add_to_queue
-from .queue_engine import compute_priority, add_patient_to_queue
+from database import AsyncSessionLocal
+from models import Doctor, Patient, PatientStatus
+from redis_client import get_next_token, add_to_queue
+from queue_engine import compute_priority, add_patient_to_queue
 
 
 SEED_DOCTORS = [
@@ -99,7 +99,7 @@ async def seed_if_empty():
             db.add(doctors[0])
             db.add(doctors[1])
             # Remove from redis queue (in consultation, not waiting)
-            from .redis_client import remove_from_queue
+            from redis_client import remove_from_queue
             await remove_from_queue(first_patient.id)
 
         await db.commit()
