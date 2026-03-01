@@ -14,9 +14,6 @@ As first-year engineering students, we wanted to build a practical solution that
 ### 🔹 Frontend (Vercel)
 👉 https://mediq-pink.vercel.app/
 
-### 🔹 Backend API (Render)
-👉 https://mediq-b06o.onrender.com/docs#/
-
 You can explore all backend APIs using the Swagger documentation link above.
 
 
