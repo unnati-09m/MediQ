@@ -76,22 +76,26 @@ We store this in Redis using Sorted Sets (ZSET) for high performance.
 ---
 
 ## 2️⃣ Token Confirmation Page
-![Token Page](./assets/token-page.png)
+<img width="1507" height="821" alt="Screenshot 2026-03-01 at 9 57 09 AM" src="https://github.com/user-attachments/assets/cbfe5e44-65f3-4e43-b347-94ea6619c33c" />
+
 
 ---
 
 ## 3️⃣ Live Queue Display
-![Live Queue](./assets/live-queue.png)
+<img width="1512" height="823" alt="Screenshot 2026-03-01 at 9 57 33 AM" src="https://github.com/user-attachments/assets/031b9c6a-038d-4525-a5a8-8850b53b0767" />
+
 
 ---
 
 ## 4️⃣ Doctor Dashboard
-![Doctor Dashboard](./assets/doctor-dashboard.png)
+<img width="1508" height="822" alt="Screenshot 2026-03-01 at 9 57 38 AM" src="https://github.com/user-attachments/assets/dea66904-26b1-497b-9639-1a73916d16eb" />
+
 
 ---
 
 ## 5️⃣ Staff Control Centre
-![Staff Dashboard](./assets/staff-dashboard.png)
+<img width="1512" height="824" alt="Screenshot 2026-03-01 at 9 57 43 AM" src="https://github.com/user-attachments/assets/387c61f5-55b2-48b5-b4f8-e70d95b85c67" />
+
 
 ---
 
