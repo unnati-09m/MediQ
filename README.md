@@ -272,8 +272,8 @@ SMS notifications
 
 👥 Team – Error 404
 
-Dheeraj Jadhav
+Dheeraj Jadhav - Queue Algorithm & Integration
 
-Unnati Mehatkar
+Unnati Mehatkar - Frontend & UI
 
-Sahil Shingate
+Sahil Shingate - Backend & Database
