@@ -180,7 +180,7 @@ On first startup, the system auto-seeds:
 3 doctors
 
 5 demo patients
-
+```
 📡 API Endpoints
 Patients
 
